@@ -91,7 +91,7 @@ class Article extends Item
 					->select(
 						$this->getState(
 							'item.select', 'a.id, a.asset_id, a.title, a.alias, a.introtext, a.fulltext, ' .
-							'a.state, s.condition, a.catid, a.created, a.created_by, a.created_by_alias, ' .
+							'a.state, a.catid, a.created, a.created_by, a.created_by_alias, ' .
 							// Use created if modified is 0
 							'CASE WHEN a.modified = ' . $db->quote($db->getNullDate()) . ' THEN a.created ELSE a.modified END as modified, ' .
 							'a.modified_by, a.checked_out, a.checked_out_time, a.publish_up, a.publish_down, ' .
@@ -102,7 +102,8 @@ class Article extends Item
 				$query->from('#__content AS a')
 					->where('a.id = ' . (int) $pk);
 
-				$query->join('LEFT', '#__workflow_states AS s ON s.id = a.state');
+				$query->select($db->qn('ws.condition'))
+					->join('LEFT', '#__workflow_states AS ws ON ws.id = a.state');
 
 				// Join on category table.
 				$query->select('c.title AS category_title, c.alias AS category_alias, c.access AS category_access')
@@ -144,8 +145,9 @@ class Article extends Item
 
 				if (is_numeric($published))
 				{
-					$query->where('s.condition = ' . $db->quote((int)$published));
+					$query->where($db->qn('ws.condition') . ' = ' . $db->quote((int) $published));
 				}
+
 
 				$db->setQuery($query);
 
@@ -153,13 +155,13 @@ class Article extends Item
 
 				if (empty($data))
 				{
-					return \JError::raiseError(404, \JText::_('COM_CONTENT_ERROR_ARTICLE_NOT_FOUND'));
+					throw new \Exception(\JText::_('COM_CONTENT_ERROR_ARTICLE_NOT_FOUND'), 404);
 				}
 
 				// Check for published state if filter set.
 				if (is_numeric($published) && $data->condition != $published)
 				{
-					return \JError::raiseError(404, \JText::_('COM_CONTENT_ERROR_ARTICLE_NOT_FOUND'));
+					throw new \Exception(\JText::_('COM_CONTENT_ERROR_ARTICLE_NOT_FOUND'), 404);
 				}
 
 				// Convert parameter fields to objects.
@@ -222,7 +224,7 @@ class Article extends Item
 				if ($e->getCode() == 404)
 				{
 					// Need to go through the error handler to allow Redirect to work.
-					\JError::raiseError(404, $e->getMessage());
+					throw new \Exception($e->getMessage(), 404);
 				}
 				else
 				{
@@ -292,7 +294,7 @@ class Article extends Item
 			}
 			catch (\RuntimeException $e)
 			{
-				\JError::raiseWarning(500, $e->getMessage());
+				\JFactory::getApplication()->enqueueMessage($e->getMessage(), 'error');
 
 				return false;
 			}
@@ -316,7 +318,7 @@ class Article extends Item
 				}
 				catch (\RuntimeException $e)
 				{
-					\JError::raiseWarning(500, $e->getMessage());
+					\JFactory::getApplication()->enqueueMessage($e->getMessage(), 'error');
 
 					return false;
 				}
@@ -343,7 +345,7 @@ class Article extends Item
 					}
 					catch (\RuntimeException $e)
 					{
-						\JError::raiseWarning(500, $e->getMessage());
+						\JFactory::getApplication()->enqueueMessage($e->getMessage(), 'error');
 
 						return false;
 					}
@@ -357,7 +359,7 @@ class Article extends Item
 			return true;
 		}
 
-		\JError::raiseWarning(500, \JText::sprintf('COM_CONTENT_INVALID_RATING', $rate), "JModelArticle::storeVote($rate)");
+		\JFactory::getApplication()->enqueueMessage(\JText::sprintf('COM_CONTENT_INVALID_RATING', $rate), 'error');
 
 		return false;
 	}
